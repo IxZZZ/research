@@ -15,20 +15,16 @@ class JavascriptInterfaceExtractor(IScript):
         self.units = RuntimeProjectUtil.findUnitsByType(self.context.getProjects()[0], IJavaSourceUnit, False)
         if self.units:
             for unit in self.units:
-                clazz = unit.getClassElement()
-                if clazz:
+                if clazz := unit.getClassElement():
                     self.extractAnnotation(clazz)
     
     def extractAnnotation(self, clazz):
         """
         := Identify and extract methods that are annotated with @JavascriptInterface
         """
-        # [IJavaMethod]
-        methods = clazz.getMethods()
-        if methods:
+        if methods := clazz.getMethods():
             for m in methods:
-                annotations = m.getMethodAnnotations()
-                if annotations:
+                if annotations := m.getMethodAnnotations():
                     for a in annotations:
                         if "JavascriptInterface" in a.getType().getSignature():
                             print("@JavacriptInterface")

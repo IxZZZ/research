@@ -18,8 +18,7 @@ class JavaNativeInterfaceExtractor(IScript):
         classez = unit.getClasses()
         for c in classez:
             if c:
-                methods = c.getMethods()
-                if methods:
+                if methods := c.getMethods():
                     for m in methods:
                         self.extractNativeMethods(m)
     
@@ -28,5 +27,7 @@ class JavaNativeInterfaceExtractor(IScript):
         := Extract access flags for a given method  
         """
         if method.getGenericFlags() & ICodeItem.FLAG_NATIVE == ICodeItem.FLAG_NATIVE:
-            print("jni -> {}".format(method.getSignature(True).replace('L', '').replace('/', '.').replace(';', '')))
+            print(
+                f"jni -> {method.getSignature(True).replace('L', '').replace('/', '.').replace(';', '')}"
+            )
         return

@@ -33,15 +33,12 @@ def printNumFunctionBasicBlocks(flowChart):
 # Build out the flow table in the variable flowTable, given a function flow chart.
 def buildFlowTable(flowChart):
     flowTable = []
-    
+
     entryNumber = 0
     while (entryNumber < flowChart.size):
-        nextEntryArray = []
         successorArray = flowChart[entryNumber].succs()
 
-        for i in successorArray:
-            nextEntryArray.append(i.startEA)
-            
+        nextEntryArray = [i.startEA for i in successorArray]
         flowTable.append([entryNumber, flowChart[entryNumber].startEA, flowChart[entryNumber].endEA, nextEntryArray])
         entryNumber += 1
     return flowTable
@@ -49,19 +46,21 @@ def buildFlowTable(flowChart):
 def enumerateBlocksThatJumpDirectlyToReturnBlock(flowTable, returnBlockStartEA):
     blocksThatHitReturnBlockDirectly = []
     for entry in flowTable:
-        for nextBlock in entry[3]: # entry[3] is nextEntryArray element of flowTable, which is an array of successor blocks.
-            if nextBlock == returnBlockStartEA:
-                blocksThatHitReturnBlockDirectly.append([entry[0], entry[1], entry[2]]) # Items are entryNumber, start address of the basic block, and end address of the basic block, in that order.
+        blocksThatHitReturnBlockDirectly.extend(
+            [entry[0], entry[1], entry[2]]
+            for nextBlock in entry[3]
+            if nextBlock == returnBlockStartEA
+        )
     return blocksThatHitReturnBlockDirectly
 
 def doesReturnBlockModifyRAX(returnBlockStartEA, returnEndEA):
     currentEA = returnBlockStartEA
     while currentEA < returnEndEA:
         if (idc.print_insn_mnem(currentEA) == "mov"):
-            if (idc.print_operand(currentEA, 0) == "rax") or (idc.print_operand(currentEA, 0) == "eax"):
+            if idc.print_operand(currentEA, 0) in ["rax", "eax"]:
                 return True
         elif (idc.print_insn_mnem(currentEA) == "xor"):
-            if (idc.print_operand(currentEA, 0) == "rax") or (idc.print_operand(currentEA, 0) == "eax"):
+            if idc.print_operand(currentEA, 0) in ["rax", "eax"]:
                 return True
         currentEA = idc.next_head(currentEA)
     return False
@@ -75,34 +74,34 @@ def printBanner():
 
 def findPotentialDataLeaks(blocksThatHitReturnBlockDirectly):
     for block in blocksThatHitReturnBlockDirectly:
-            blockStartEA = block[1]
-            blockEndEA = block[2]
-            currentEA = blockStartEA
-            flagHitMovEAX = False
+        blockStartEA = block[1]
+        blockEndEA = block[2]
+        currentEA = blockStartEA
+        flagHitMovEAX = False
 
             # Uncomment the following line to see the start and end positions of each of the blocks in the array blocksThatHitReturnBlockDirectly
             #print("Block Start: %x  Block End: %x" %(blockStartEA, blockEndEA))
-            while (currentEA < blockEndEA):
-                if (idc.print_insn_mnem(currentEA) == "mov"):
-                    if (idc.print_operand(currentEA, 0) == "rax"):
-                        if (idc.get_operand_type(currentEA, 1) == idaapi.o_mem): # Thanks to https://www.hex-rays.com/products/ida/support/idapython_docs/idc-module.html#get_operand_type and more specifically
-                                                                    # https://www.hex-rays.com/products/ida/support/sdkdoc/group__o__.html#gac180aea251826e5e5e484905e116c4cc for breaking this down and showing 
-                                                                    # that the value 2 is really o_mem aka Direct Memory Reference (DATA) or a direct memory data reference whose target address is 
-                                                                    # known at compilation time.
-                            if flagHitMovEAX != True:
-                                print("Potentially leaking %s at %x" %(idc.print_operand(currentEA, 1), currentEA) )
-                                flagHitMovEAX = True
-                                currentEA = idc.next_head(currentEA) # Need this as we don't want to repeat the same result we just detected.
-                                while (currentEA < blockEndEA):
-                                    if (idc.print_insn_mnem(currentEA) != "test"): # Quick filter here of blacklisted memnomics that essentially do nothing to RAX and that we can safely ignore.
-                                        if (idc.print_operand(currentEA, 0) == "rax") or (idc.print_operand(currentEA, 0) == "eax"):
-                                            if (idc.get_operand_type(currentEA, 1) != idaapi.o_mem):
-                                                print(" [!] Looks like leak wasn't true. RAX/EAX gets clobbered at %x" %(currentEA))
-                                            else:
-                                                print(" [*] Interesting, looks like we may have had RAX overwritten with another leak. Updating...")
-                                                print("Potentially leaking %s at %x" %(idc.print_operand(currentEA, 1), currentEA) )
-                                    currentEA = idc.next_head(currentEA)
-                currentEA = idc.next_head(currentEA)
+        while (currentEA < blockEndEA):
+            if (
+                (idc.print_insn_mnem(currentEA) == "mov")
+                and (idc.print_operand(currentEA, 0) == "rax")
+                and (idc.get_operand_type(currentEA, 1) == idaapi.o_mem)
+                and flagHitMovEAX != True
+            ):
+                print("Potentially leaking %s at %x" %(idc.print_operand(currentEA, 1), currentEA) )
+                flagHitMovEAX = True
+                currentEA = idc.next_head(currentEA) # Need this as we don't want to repeat the same result we just detected.
+                while (currentEA < blockEndEA):
+                    if (
+                        idc.print_insn_mnem(currentEA) != "test"
+                    ) and idc.print_operand(currentEA, 0) in ["rax", "eax"]:
+                        if (idc.get_operand_type(currentEA, 1) != idaapi.o_mem):
+                            print(" [!] Looks like leak wasn't true. RAX/EAX gets clobbered at %x" %(currentEA))
+                        else:
+                            print(" [*] Interesting, looks like we may have had RAX overwritten with another leak. Updating...")
+                            print("Potentially leaking %s at %x" %(idc.print_operand(currentEA, 1), currentEA) )
+                    currentEA = idc.next_head(currentEA)
+            currentEA = idc.next_head(currentEA)
 
 def main():
     # Print banner
@@ -111,7 +110,7 @@ def main():
     # First let's get the function object for the current function.
     functionObject = idaapi.get_func(here())
     try:
-        if (functionObject == None):
+        if functionObject is None:
             print("This is not a function! Exiting!")
             return -1
     except:
@@ -120,7 +119,7 @@ def main():
     # Now let's get its flowchart.
     flowChart = idaapi.FlowChart(functionObject)
     try:
-        if (flowChart == None):
+        if flowChart is None:
             print("Could not build a flow chart! Exiting!")
             return -1
     except:
@@ -142,7 +141,7 @@ def main():
 
     # Build the flow table from the flow chart that we currently possess.
     flowTable = buildFlowTable(flowChart)
-    
+
     # Uncomment this to print out the full flow table.
     #printFlowTable(flowTable)
 
