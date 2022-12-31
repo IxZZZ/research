@@ -9,10 +9,7 @@ for i in str(result.stdout).split("\\r\\r\\n"):
     for j in i.split(","):
         if ".exe" in j:
             binPath = ""
-            if len(j.split("\"")) > 1:
-                binPath = j.split("\"")[1]
-            else:
-                binPath = j
+            binPath = j.split("\"")[1] if len(j.split("\"")) > 1 else j
             try:
                 pe = pefile.PE(binPath)
             except:
